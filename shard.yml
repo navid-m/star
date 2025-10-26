@@ -1,0 +1,9 @@
+name: stardb
+version: 0.1.0
+
+authors:
+  - Navid M <navidmomtahen@gmail.com>
+
+crystal: '>= 1.18.1'
+
+license: MIT
