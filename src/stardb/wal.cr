@@ -34,16 +34,21 @@ module StarDB
 
       def self.deserialize(io : IO) : Entry
         type_byte = io.read_byte
-        raise IO::EOFError.new if type_byte.nil?
-        type = EntryType.new(type_byte)
         
+        raise IO::EOFError.new if type_byte.nil?
+
+        type = EntryType.new(type_byte)
         timestamp = io.read_bytes(Int64, IO::ByteFormat::LittleEndian)
         key_size = io.read_bytes(UInt32, IO::ByteFormat::LittleEndian)
         key_bytes = Bytes.new(key_size)
+        
         io.read_fully(key_bytes)
+
         key = String.new(key_bytes)
         has_value_byte = io.read_byte
+
         raise IO::EOFError.new if has_value_byte.nil?
+        
         has_value = has_value_byte == 1_u8
         value = has_value ? Value.deserialize(io) : nil
         
@@ -55,19 +60,43 @@ module StarDB
     @path : String
     @mutex : Mutex
     @sync_on_write : Bool
+    @buffer : IO::Memory
+    @buffer_size : Int32
 
-    def initialize(@path : String, @sync_on_write : Bool = false)
+    def initialize(@path : String, @sync_on_write : Bool = false, @buffer_size : Int32 = 64 * 1024)
       @file = File.open(@path, "a+")
       @mutex = Mutex.new
+      @buffer = IO::Memory.new(@buffer_size)
     end
 
     def append(entry : Entry)
       @mutex.synchronize do
         return if @file.closed?
-        entry.serialize(@file)
-        @file.flush
-        @file.fsync if @sync_on_write
+        entry.serialize(@buffer)
+        
+        if @buffer.pos >= @buffer_size - 1024
+          flush_buffer
+        end
       end
+    end
+
+    def append_batch(entries : Array(Entry))
+      @mutex.synchronize do
+        return if @file.closed?
+        entries.each { |entry| entry.serialize(@buffer) }
+        flush_buffer
+      end
+    end
+
+    private def flush_buffer
+      return if @buffer.pos == 0
+      size = @buffer.pos
+      @buffer.rewind
+      @file.write(@buffer.to_slice[0, size])
+      @file.flush
+      @file.fsync if @sync_on_write
+      @buffer.clear
+      @buffer.rewind
     end
 
     def put(key : String, value : Value)
@@ -95,6 +124,7 @@ module StarDB
     def truncate
       @mutex.synchronize do
         return if @file.closed?
+        flush_buffer
         @file.truncate(0)
         @file.rewind
       end
@@ -102,7 +132,14 @@ module StarDB
 
     def close
       @mutex.synchronize do
+        flush_buffer unless @file.closed?
         @file.close unless @file.closed?
+      end
+    end
+
+    def flush
+      @mutex.synchronize do
+        flush_buffer unless @file.closed?
       end
     end
 

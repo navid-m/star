@@ -34,42 +34,107 @@ module StarDB
 
     def put(key : String, value : Value)
       @mutex.synchronize do
-        update = Array(Node?).new(MAX_LEVEL + 1, nil)
-        current = @head
+        put_internal(key, value)
+      end
+    end
 
-        (@level).downto(0) do |i|
-          while (next_node = current.forward[i]) && next_node.key < key
-            current = next_node
+    def put_batch(entries : Array(Tuple(String, Value)))
+      @mutex.synchronize do
+        entries.each do |key, value|
+          put_internal(key, value)
+        end
+      end
+    end
+
+    def put_internal_unsafe(key : String, value : Value)
+      put_internal(key, value)
+    end
+
+    def put_bulk_unsafe(sorted_entries : Array(Tuple(String, Value)))
+      return if sorted_entries.empty?
+      
+      timestamp = Time.utc.to_unix_ms
+      update = Array(Node?).new(MAX_LEVEL + 1, nil)
+      (0..MAX_LEVEL).each { |i| update[i] = @head }
+      
+      sorted_entries.each do |key, value|
+        put_internal_optimized(key, value, timestamp, update)
+      end
+    end
+
+    private def put_internal_optimized(key : String, value : Value, timestamp : Int64, update : Array(Node?))
+      (@level).downto(0) do |i|
+        current = update[i].not_nil!
+        while (next_node = current.forward[i]) && next_node.key < key
+          current = next_node
+        end
+        update[i] = current
+      end
+
+      current = update[0].not_nil!.forward[0]
+
+      if current && current.key == key
+        old_size = current.value.try(&.size) || 0
+        current.value = value
+        current.deleted = false
+        current.timestamp = timestamp
+        @byte_size += value.size - old_size
+      else
+        new_level = random_level
+        if new_level > @level
+          ((@level + 1)..new_level).each do |i|
+            update[i] = @head
           end
-          update[i] = current
+          @level = new_level
         end
 
-        current = current.forward[0]
-
-        if current && current.key == key
-          old_size = current.value.try(&.size) || 0
-          current.value = value
-          current.deleted = false
-          current.timestamp = Time.utc.to_unix_ms
-          @byte_size += value.size - old_size
-        else
-          new_level = random_level
-          if new_level > @level
-            ((@level + 1)..new_level).each do |i|
-              update[i] = @head
-            end
-            @level = new_level
-          end
-
-          new_node = Node.new(key, value, false, Time.utc.to_unix_ms, new_level)
-          (0..new_level).each do |i|
-            new_node.forward[i] = update[i].not_nil!.forward[i]
-            update[i].not_nil!.forward[i] = new_node
-          end
-
-          @size += 1
-          @byte_size += key.bytesize + value.size + 16
+        new_node = Node.new(key, value, false, timestamp, new_level)
+        (0..new_level).each do |i|
+          new_node.forward[i] = update[i].not_nil!.forward[i]
+          update[i].not_nil!.forward[i] = new_node
         end
+
+        @size += 1
+        @byte_size += key.bytesize + value.size + 16
+      end
+    end
+
+    private def put_internal(key : String, value : Value)
+      update = Array(Node?).new(MAX_LEVEL + 1, nil)
+      current = @head
+
+      (@level).downto(0) do |i|
+        while (next_node = current.forward[i]) && next_node.key < key
+          current = next_node
+        end
+        update[i] = current
+      end
+
+      current = current.forward[0]
+
+      if current && current.key == key
+        old_size = current.value.try(&.size) || 0
+        current.value = value
+        current.deleted = false
+        current.timestamp = Time.utc.to_unix_ms
+        @byte_size += value.size - old_size
+      else
+        new_level = random_level
+        if new_level > @level
+          ((@level + 1)..new_level).each do |i|
+            update[i] = @head
+          end
+          @level = new_level
+        end
+
+        new_node = Node.new(key, value, false, Time.utc.to_unix_ms, new_level)
+        (0..new_level).each do |i|
+          new_node.forward[i] = update[i].not_nil!.forward[i]
+          update[i].not_nil!.forward[i] = new_node
+        end
+
+        @size += 1
+        @byte_size += key.bytesize + value.size + 16
       end
     end
 

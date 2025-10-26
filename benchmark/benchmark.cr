@@ -36,6 +36,19 @@ def benchmark_sequential_writes(db : StarDB::Database, count : Int32)
   end
 end
 
+def benchmark_batch_writes(db : StarDB::Database, count : Int32, batch_size : Int32 = 1000)
+  (count // batch_size).times do |batch|
+    entries = Array(Tuple(String, StarDB::Value)).new(batch_size)
+    batch_size.times do |i|
+      idx = batch * batch_size + i
+      key = "key_#{idx.to_s.rjust(10, '0')}"
+      value = "value_#{idx}_#{random_string(VALUE_SIZE)}"
+      entries << {key, StarDB::Value.from(value)}
+    end
+    db.batch_put(entries)
+  end
+end
+
 def benchmark_random_writes(db : StarDB::Database, count : Int32)
   count.times do
     key = "key_#{Random.rand(count).to_s.rjust(10, '0')}"
@@ -98,11 +111,22 @@ puts
 rm_rf("tmp/benchmark_db")
 Dir.mkdir_p("tmp/benchmark_db")
 
+# Append-only memtable for maximum write performance
 db = StarDB::Database.new("tmp/benchmark_db", sync_on_write: false)
 
 puts "Sequential Writes:"
 time = Benchmark.measure do
   benchmark_sequential_writes(db, NUM_OPERATIONS)
+end
+ops_per_sec = NUM_OPERATIONS / time.real
+puts "  Time: #{time.real.round(3)}s"
+puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
+puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
+puts
+
+puts "Batch Writes (1000 per batch):"
+time = Benchmark.measure do
+  benchmark_batch_writes(db, NUM_OPERATIONS, 1000)
 end
 ops_per_sec = NUM_OPERATIONS / time.real
 puts "  Time: #{time.real.round(3)}s"

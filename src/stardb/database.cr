@@ -1,4 +1,4 @@
-require "./memtable"
+require "./memtable_v2"
 require "./sstable"
 require "./wal"
 require "./compaction"
@@ -10,8 +10,8 @@ module StarDB
     MEMTABLE_FLUSH_SIZE = 64 * 1024 * 1024
 
     @path : String
-    @memtable : MemTable
-    @immutable_memtables : Array(MemTable)
+    @memtable : MemTableV2
+    @immutable_memtables : Array(ImmutableMemTable)
     @wal : WAL
     @compaction : CompactionManager
     @mutex : Mutex
@@ -22,8 +22,8 @@ module StarDB
     def initialize(@path : String, @sync_on_write : Bool = false)
       Dir.mkdir_p(@path)
       
-      @memtable = MemTable.new
-      @immutable_memtables = [] of MemTable
+      @memtable = MemTableV2.new
+      @immutable_memtables = [] of ImmutableMemTable
       @wal = WAL.new(File.join(@path, "wal.log"), @sync_on_write)
       @compaction = CompactionManager.new(@path)
       @mutex = Mutex.new
@@ -94,6 +94,48 @@ module StarDB
       @mutex.synchronize do
         @wal.put(key, value)
         @memtable.put(key, value)
+        
+        if @memtable.byte_size >= MEMTABLE_FLUSH_SIZE
+          rotate_memtable
+        end
+      end
+    end
+
+    def batch_put(entries : Hash(String, Bool))
+      batch_put_internal(entries.map { |k, v| {k, Value.from(v)} })
+    end
+
+    def batch_put(entries : Hash(String, Int32))
+      batch_put_internal(entries.map { |k, v| {k, Value.from(v)} })
+    end
+
+    def batch_put(entries : Hash(String, Int64))
+      batch_put_internal(entries.map { |k, v| {k, Value.from(v)} })
+    end
+
+    def batch_put(entries : Hash(String, Float64))
+      batch_put_internal(entries.map { |k, v| {k, Value.from(v)} })
+    end
+
+    def batch_put(entries : Hash(String, String))
+      batch_put_internal(entries.map { |k, v| {k, Value.from(v)} })
+    end
+
+    def batch_put(entries : Array(Tuple(String, Value)))
+      batch_put_internal(entries)
+    end
+
+    private def batch_put_internal(entries : Array(Tuple(String, Value)))
+      return unless @running
+      return if entries.empty?
+      
+      @mutex.synchronize do
+        wal_entries = entries.map { |k, v| WAL::Entry.new(WAL::EntryType::Put, k, v) }
+        @wal.append_batch(wal_entries)
+        
+        entries.each do |key, value|
+          @memtable.put(key, value)
+        end
         
         if @memtable.byte_size >= MEMTABLE_FLUSH_SIZE
           rotate_memtable
@@ -185,6 +227,7 @@ module StarDB
       @running = false
       
       sleep 0.2.seconds
+      
       flush_immutable_memtables
       
       @compaction.close
@@ -210,8 +253,9 @@ module StarDB
     end
 
     private def rotate_memtable
-      @immutable_memtables << @memtable
-      @memtable = MemTable.new
+      sorted_entries = @memtable.sorted_entries
+      @immutable_memtables << ImmutableMemTable.new(sorted_entries)
+      @memtable = MemTableV2.new
       @wal.truncate
     end
 
@@ -219,7 +263,10 @@ module StarDB
       @flush_fiber = spawn do
         while @running
           sleep 1.second
-          flush_immutable_memtables if @running
+          if @running
+            flush_immutable_memtables
+            @wal.flush
+          end
         end
       end
     end
@@ -236,7 +283,7 @@ module StarDB
       end
     end
 
-    private def flush_memtable_to_sstable(memtable : MemTable)
+    private def flush_memtable_to_sstable(memtable : ImmutableMemTable)
       entries = [] of Tuple(String, Value?, Bool, Int64)
       memtable.each do |key, value, deleted, timestamp|
         entries << {key, value, deleted, timestamp}
