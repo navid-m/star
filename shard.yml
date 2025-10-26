@@ -1,4 +1,4 @@
-name: stardb
+name: star
 version: 1.0.0
 
 authors:
@@ -6,4 +6,4 @@ authors:
 
 crystal: '>= 1.18.1'
 
-license: MIT
+license: GPL-3.0
