@@ -1,10 +1,8 @@
 require "../src/stardb"
 require "benchmark"
 
-# Helper to recursively remove directories
 def rm_rf(path : String)
   return unless Dir.exists?(path) || File.exists?(path)
-  
   if Dir.exists?(path)
     Dir.each_child(path) do |entry|
       full_path = File.join(path, entry)
@@ -20,7 +18,6 @@ def rm_rf(path : String)
   end
 end
 
-# Benchmark configuration
 NUM_OPERATIONS = 100_000
 KEY_SIZE = 16
 VALUE_SIZE = 100
@@ -98,14 +95,11 @@ puts "Value Size: #{VALUE_SIZE} bytes"
 puts "=" * 80
 puts
 
-# Clean up any existing test database
 rm_rf("tmp/benchmark_db")
 Dir.mkdir_p("tmp/benchmark_db")
 
-# Create database without sync_on_write for better benchmark performance
 db = StarDB::Database.new("tmp/benchmark_db", sync_on_write: false)
 
-# Sequential Writes
 puts "Sequential Writes:"
 time = Benchmark.measure do
   benchmark_sequential_writes(db, NUM_OPERATIONS)
@@ -116,7 +110,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
 puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
 puts
 
-# Sequential Reads
 puts "Sequential Reads:"
 time = Benchmark.measure do
   benchmark_sequential_reads(db, NUM_OPERATIONS)
@@ -127,7 +120,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
 puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
 puts
 
-# Random Writes
 puts "Random Writes:"
 time = Benchmark.measure do
   benchmark_random_writes(db, NUM_OPERATIONS)
@@ -138,7 +130,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
 puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
 puts
 
-# Random Reads
 puts "Random Reads:"
 time = Benchmark.measure do
   benchmark_random_reads(db, NUM_OPERATIONS)
@@ -149,7 +140,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
 puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
 puts
 
-# Mixed Workload
 puts "Mixed Workload (50% read, 40% write, 10% delete):"
 time = Benchmark.measure do
   benchmark_mixed_workload(db, NUM_OPERATIONS)
@@ -160,7 +150,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} ops/sec"
 puts "  Latency: #{(time.real * 1_000_000 / NUM_OPERATIONS).round(2)} μs/op"
 puts
 
-# Range Scans
 scan_size = 100
 puts "Range Scans (#{scan_size} keys per scan):"
 time = Benchmark.measure do
@@ -173,7 +162,6 @@ puts "  Throughput: #{ops_per_sec.round(0)} scans/sec"
 puts "  Latency: #{(time.real * 1000 / num_scans).round(2)} ms/scan"
 puts
 
-# Data Types Benchmark
 puts "Data Types Performance:"
 types_count = 10_000
 time = Benchmark.measure do
@@ -192,11 +180,9 @@ puts
 
 db.close
 
-# Database size
 db_size = Dir.glob("tmp/benchmark_db/*").sum { |f| File.size(f) }
 puts "=" * 80
 puts "Database Size: #{(db_size / 1024.0 / 1024.0).round(2)} MB"
 puts "=" * 80
 
-# Clean up
 rm_rf("tmp/benchmark_db")
