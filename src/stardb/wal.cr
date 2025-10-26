@@ -54,8 +54,9 @@ module StarDB
     @file : File
     @path : String
     @mutex : Mutex
+    @sync_on_write : Bool
 
-    def initialize(@path : String)
+    def initialize(@path : String, @sync_on_write : Bool = false)
       @file = File.open(@path, "a+")
       @mutex = Mutex.new
     end
@@ -65,7 +66,7 @@ module StarDB
         return if @file.closed?
         entry.serialize(@file)
         @file.flush
-        @file.fsync
+        @file.fsync if @sync_on_write
       end
     end
 

@@ -17,13 +17,14 @@ module StarDB
     @mutex : Mutex
     @flush_fiber : Fiber?
     @running : Bool
+    @sync_on_write : Bool
 
-    def initialize(@path : String)
+    def initialize(@path : String, @sync_on_write : Bool = false)
       Dir.mkdir_p(@path)
       
       @memtable = MemTable.new
       @immutable_memtables = [] of MemTable
-      @wal = WAL.new(File.join(@path, "wal.log"))
+      @wal = WAL.new(File.join(@path, "wal.log"), @sync_on_write)
       @compaction = CompactionManager.new(@path)
       @mutex = Mutex.new
       @running = true
@@ -32,6 +33,7 @@ module StarDB
       load_sstables
       
       @compaction.start_background_compaction
+      
       start_flush_worker
     end
 

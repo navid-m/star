@@ -102,7 +102,8 @@ puts
 rm_rf("tmp/benchmark_db")
 Dir.mkdir_p("tmp/benchmark_db")
 
-db = StarDB::Database.new("tmp/benchmark_db")
+# Create database without sync_on_write for better benchmark performance
+db = StarDB::Database.new("tmp/benchmark_db", sync_on_write: false)
 
 # Sequential Writes
 puts "Sequential Writes:"
