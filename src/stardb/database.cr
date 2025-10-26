@@ -227,7 +227,6 @@ module StarDB
       @running = false
       
       sleep 0.2.seconds
-      
       flush_immutable_memtables
       
       @compaction.close
