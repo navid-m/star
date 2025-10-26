@@ -1,4 +1,4 @@
-require "../src/stardb"
+require "../src/star"
 require "benchmark"
 
 def rm_rf(path : String)

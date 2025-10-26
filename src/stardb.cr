@@ -1,10 +1,10 @@
-require "./stardb/value"
-require "./stardb/bloom_filter"
-require "./stardb/wal"
-require "./stardb/memtable"
-require "./stardb/sstable"
-require "./stardb/compaction"
-require "./stardb/database"
+require "./star/value"
+require "./star/bloom_filter"
+require "./star/wal"
+require "./star/memtable"
+require "./star/sstable"
+require "./star/compaction"
+require "./star/database"
 
 module StarDB
   VERSION = "0.1.0"

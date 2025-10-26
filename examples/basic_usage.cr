@@ -1,4 +1,4 @@
-require "../src/stardb"
+require "../src/star"
 
 db = StarDB::Database.new("my_database")
 

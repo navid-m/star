@@ -1,5 +1,5 @@
 require "spec"
-require "../src/stardb"
+require "../src/star"
 
 # Helper to recursively remove directories
 def rm_rf(path : String)
